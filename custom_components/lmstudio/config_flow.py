@@ -2,6 +2,7 @@
 
 from __future__ import annotations
 
+from collections.abc import Mapping
 from typing import Any
 
 import voluptuous as vol
@@ -9,8 +10,18 @@ from homeassistant.config_entries import ConfigFlow, ConfigFlowResult, OptionsFl
 from homeassistant.const import CONF_HOST, CONF_PORT
 from homeassistant.core import callback
 from homeassistant.helpers.aiohttp_client import async_get_clientsession
+from homeassistant.helpers.selector import (
+    TextSelector,
+    TextSelectorConfig,
+    TextSelectorType,
+)
 
-from .api import LMStudioAuthError, LMStudioClient, LMStudioConnectionError
+from .api import (
+    LMStudioAuthError,
+    LMStudioClient,
+    LMStudioConnectionError,
+    LMStudioError,
+)
 from .const import (
     CONF_API_TOKEN,
     CONF_SCAN_INTERVAL,
@@ -21,6 +32,8 @@ from .const import (
     MAX_SCAN_INTERVAL,
     MIN_SCAN_INTERVAL,
 )
+
+TOKEN_SELECTOR = TextSelector(TextSelectorConfig(type=TextSelectorType.PASSWORD))
 
 
 class LMStudioConfigFlow(ConfigFlow, domain=DOMAIN):
@@ -47,7 +60,7 @@ class LMStudioConfigFlow(ConfigFlow, domain=DOMAIN):
                 await client.async_get_data()
             except LMStudioAuthError:
                 errors["base"] = "invalid_auth"
-            except LMStudioConnectionError:
+            except (LMStudioConnectionError, LMStudioError):
                 errors["base"] = "cannot_connect"
             except Exception:  # noqa: BLE001
                 errors["base"] = "unknown"
@@ -65,10 +78,48 @@ class LMStudioConfigFlow(ConfigFlow, domain=DOMAIN):
                 vol.Required(
                     CONF_PORT, default=(user_input or {}).get(CONF_PORT, DEFAULT_PORT)
                 ): vol.All(vol.Coerce(int), vol.Range(min=1, max=65535)),
-                vol.Optional(CONF_API_TOKEN): str,
+                vol.Optional(CONF_API_TOKEN): TOKEN_SELECTOR,
             }
         )
         return self.async_show_form(step_id="user", data_schema=schema, errors=errors)
+
+    async def async_step_reauth(
+        self, entry_data: Mapping[str, Any]
+    ) -> ConfigFlowResult:
+        """Start reauthentication after the token was rejected."""
+        return await self.async_step_reauth_confirm()
+
+    async def async_step_reauth_confirm(
+        self, user_input: dict[str, Any] | None = None
+    ) -> ConfigFlowResult:
+        """Ask for a new API token."""
+        entry = self._get_reauth_entry()
+        errors: dict[str, str] = {}
+        if user_input is not None:
+            token = user_input.get(CONF_API_TOKEN) or None
+            client = LMStudioClient(
+                async_get_clientsession(self.hass),
+                entry.data[CONF_HOST],
+                entry.data[CONF_PORT],
+                token,
+            )
+            try:
+                await client.async_get_data()
+            except LMStudioAuthError:
+                errors["base"] = "invalid_auth"
+            except LMStudioError:
+                errors["base"] = "cannot_connect"
+            else:
+                data = {k: v for k, v in entry.data.items() if k != CONF_API_TOKEN}
+                if token:
+                    data[CONF_API_TOKEN] = token
+                return self.async_update_reload_and_abort(entry, data=data)
+        return self.async_show_form(
+            step_id="reauth_confirm",
+            data_schema=vol.Schema({vol.Optional(CONF_API_TOKEN): TOKEN_SELECTOR}),
+            description_placeholders={"host": entry.data[CONF_HOST]},
+            errors=errors,
+        )
 
     @staticmethod
     @callback

@@ -75,6 +75,27 @@ async def test_duplicate_aborts(hass, mock_entry, mock_api) -> None:
     assert result["reason"] == "already_configured"
 
 
+async def test_reauth_flow(hass, mock_entry, mock_api, aioclient_mock) -> None:
+    """Reauth validates and stores the new token, then reloads."""
+    mock_entry.add_to_hass(hass)
+    assert await hass.config_entries.async_setup(mock_entry.entry_id)
+    result = await mock_entry.start_reauth_flow(hass)
+    assert result["step_id"] == "reauth_confirm"
+
+    with patch(GET, AsyncMock(side_effect=LMStudioAuthError("x"))):
+        result = await hass.config_entries.flow.async_configure(
+            result["flow_id"], {CONF_API_TOKEN: "bad"}
+        )
+    assert result["errors"] == {"base": "invalid_auth"}
+
+    result = await hass.config_entries.flow.async_configure(
+        result["flow_id"], {CONF_API_TOKEN: "new"}
+    )
+    assert result["type"] is FlowResultType.ABORT
+    assert result["reason"] == "reauth_successful"
+    assert mock_entry.data[CONF_API_TOKEN] == "new"
+
+
 async def test_options_flow(hass, mock_entry, mock_api) -> None:
     """The scan interval is configurable."""
     mock_entry.add_to_hass(hass)

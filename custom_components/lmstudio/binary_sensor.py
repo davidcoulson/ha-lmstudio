@@ -23,13 +23,10 @@ async def async_setup_entry(
     coordinator = entry.runtime_data
     async_add_entities([LMStudioServerSensor(coordinator)])
     sync_model_entities(
-        hass,
         entry,
         coordinator,
         async_add_entities,
-        "binary_sensor",
         lambda key: [LMStudioFlashAttentionSensor(coordinator, key)],
-        ("flash_attention",),
     )
 
 

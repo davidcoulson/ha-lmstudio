@@ -9,6 +9,7 @@ from custom_components.lmstudio.api import (
     LMStudioAuthError,
     LMStudioClient,
     LMStudioConnectionError,
+    LMStudioInvalidResponseError,
     parse_v0,
     parse_v1,
 )
@@ -72,3 +73,18 @@ async def test_client_errors(hass, aioclient_mock) -> None:
     aioclient_mock.get("http://h:1/api/v1/models", exc=TimeoutError)
     with pytest.raises(LMStudioConnectionError):
         await client.async_get_data()
+
+
+@pytest.mark.parametrize("bad", [{}, [], {"models": None}, {"models": [1]}])
+def test_parse_v1_rejects_bad_envelope(bad) -> None:
+    """Wrong shapes raise instead of parsing as zero models."""
+    with pytest.raises(LMStudioInvalidResponseError):
+        parse_v1(bad)
+
+
+def test_primary_instance_is_lowest_id() -> None:
+    """Instance choice does not depend on list order."""
+    from custom_components.lmstudio.api import LoadedInstance, Model
+
+    model = Model("k", "K", "llm", instances=[LoadedInstance("b"), LoadedInstance("a")])
+    assert model.primary_instance.id == "a"

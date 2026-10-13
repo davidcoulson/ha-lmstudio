@@ -7,7 +7,7 @@ from typing import Any
 
 import aiohttp
 
-from .const import REQUEST_TIMEOUT
+from .const import LOAD_TIMEOUT, REQUEST_TIMEOUT
 
 
 class LMStudioError(Exception):
@@ -20,6 +20,18 @@ class LMStudioConnectionError(LMStudioError):
 
 class LMStudioAuthError(LMStudioError):
     """The server rejected the API token."""
+
+
+class LMStudioInvalidResponseError(LMStudioError):
+    """The server answered with something that is not a model list."""
+
+
+class LMStudioUnsupportedError(LMStudioError):
+    """The server lacks the endpoint (an LM Studio without REST API v1)."""
+
+
+class _NotFoundError(LMStudioError):
+    """HTTP 404 (internal; used to trigger the v0 fallback)."""
 
 
 @dataclass(slots=True)
@@ -53,6 +65,14 @@ class Model:
     def loaded(self) -> bool:
         """Return True if at least one instance is loaded."""
         return bool(self.instances)
+
+    @property
+    def primary_instance(self) -> LoadedInstance | None:
+        """The instance entities report: the one with the lowest id.
+
+        Deterministic regardless of the order the server lists instances in.
+        """
+        return min(self.instances, key=lambda i: i.id, default=None)
 
 
 @dataclass(slots=True)
@@ -89,10 +109,20 @@ def _parse_v1_instance(raw: dict[str, Any]) -> LoadedInstance:
     )
 
 
-def parse_v1(payload: dict[str, Any]) -> LMStudioData:
+def _records(payload: Any, field_name: str) -> list[dict[str, Any]]:
+    """Return payload[field_name], insisting on a list of objects."""
+    if not isinstance(payload, dict):
+        raise LMStudioInvalidResponseError("response is not a JSON object")
+    records = payload.get(field_name)
+    if not isinstance(records, list) or not all(isinstance(r, dict) for r in records):
+        raise LMStudioInvalidResponseError(f"response has no valid '{field_name}' list")
+    return records
+
+
+def parse_v1(payload: Any) -> LMStudioData:
     """Parse a GET /api/v1/models response."""
     models: dict[str, Model] = {}
-    for raw in payload.get("models") or []:
+    for raw in _records(payload, "models"):
         key = raw.get("key")
         if not key:
             continue
@@ -110,16 +140,16 @@ def parse_v1(payload: dict[str, Any]) -> LMStudioData:
             instances=[
                 _parse_v1_instance(i)
                 for i in raw.get("loaded_instances") or []
-                if i.get("id")
+                if isinstance(i, dict) and i.get("id")
             ],
         )
     return LMStudioData(models=models)
 
 
-def parse_v0(payload: dict[str, Any]) -> LMStudioData:
+def parse_v0(payload: Any) -> LMStudioData:
     """Parse the older GET /api/v0/models response (fewer fields)."""
     models: dict[str, Model] = {}
-    for raw in payload.get("data") or []:
+    for raw in _records(payload, "data"):
         key = raw.get("id")
         if not key:
             continue
@@ -156,7 +186,11 @@ class LMStudioClient:
         self._headers = {"Authorization": f"Bearer {token}"} if token else {}
 
     async def _request(
-        self, method: str, path: str, json: dict[str, Any] | None = None
+        self,
+        method: str,
+        path: str,
+        json: dict[str, Any] | None = None,
+        timeout: float = REQUEST_TIMEOUT,
     ) -> Any:
         try:
             async with self._session.request(
@@ -164,26 +198,39 @@ class LMStudioClient:
                 f"{self._base}{path}",
                 json=json,
                 headers=self._headers,
-                timeout=aiohttp.ClientTimeout(total=REQUEST_TIMEOUT),
+                timeout=aiohttp.ClientTimeout(total=timeout),
             ) as resp:
                 if resp.status in (401, 403):
                     raise LMStudioAuthError(f"HTTP {resp.status}")
                 if resp.status == 404:
-                    raise FileNotFoundError(path)
+                    raise _NotFoundError(path)
                 resp.raise_for_status()
                 return await resp.json(content_type=None)
         except (aiohttp.ClientError, TimeoutError) as err:
             raise LMStudioConnectionError(str(err)) from err
+        except ValueError as err:
+            raise LMStudioInvalidResponseError(f"invalid JSON: {err}") from err
+
+    async def _management_request(
+        self, path: str, body: dict[str, Any], timeout: float
+    ) -> None:
+        try:
+            await self._request("POST", path, body, timeout)
+        except _NotFoundError as err:
+            raise LMStudioUnsupportedError(
+                "Model management needs LM Studio REST API v1 "
+                "(this server only offers /api/v0)"
+            ) from err
 
     async def async_get_data(self) -> LMStudioData:
         """Fetch and parse the model list, falling back to /api/v0."""
         try:
             return parse_v1(await self._request("GET", "/api/v1/models"))
-        except FileNotFoundError:
+        except _NotFoundError:
             pass
         try:
             return parse_v0(await self._request("GET", "/api/v0/models"))
-        except FileNotFoundError as err:
+        except _NotFoundError as err:
             raise LMStudioConnectionError("No models endpoint found") from err
 
     async def async_load_model(
@@ -202,10 +249,10 @@ class LMStudioClient:
         ):
             if value is not None:
                 body[name] = value
-        await self._request("POST", "/api/v1/models/load", body)
+        await self._management_request("/api/v1/models/load", body, LOAD_TIMEOUT)
 
     async def async_unload_model(self, instance_id: str) -> None:
         """Unload a loaded instance."""
-        await self._request(
-            "POST", "/api/v1/models/unload", {"instance_id": instance_id}
+        await self._management_request(
+            "/api/v1/models/unload", {"instance_id": instance_id}, REQUEST_TIMEOUT
         )

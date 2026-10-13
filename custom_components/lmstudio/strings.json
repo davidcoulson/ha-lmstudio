@@ -9,6 +9,13 @@
           "port": "Port",
           "api_token": "API token (optional)"
         }
+      },
+      "reauth_confirm": {
+        "title": "Re-authenticate LM Studio",
+        "description": "The API token for {host} was rejected. Enter a new token.",
+        "data": {
+          "api_token": "API token"
+        }
       }
     },
     "error": {
@@ -17,7 +24,8 @@
       "unknown": "Unexpected error"
     },
     "abort": {
-      "already_configured": "This LM Studio server is already configured"
+      "already_configured": "This LM Studio server is already configured",
+      "reauth_successful": "Re-authentication was successful"
     }
   },
   "options": {
@@ -31,25 +39,39 @@
   },
   "entity": {
     "binary_sensor": {
-      "server": { "name": "Server" },
-      "flash_attention": { "name": "{model} flash attention" }
+      "server": {
+        "name": "Server"
+      },
+      "flash_attention": {
+        "name": "{model} flash attention"
+      }
     },
     "sensor": {
-      "loaded_models": { "name": "Loaded models" },
-      "available_models": { "name": "Available models" },
-      "context_length": { "name": "{model} context length" },
-      "parallel": { "name": "{model} parallel slots" },
-      "model_size": { "name": "{model} size" }
+      "loaded_models": {
+        "name": "Loaded models"
+      },
+      "available_models": {
+        "name": "Available models"
+      },
+      "context_length": {
+        "name": "{model} context length"
+      },
+      "parallel": {
+        "name": "{model} parallel slots"
+      },
+      "model_size": {
+        "name": "{model} size"
+      }
     }
   },
   "services": {
     "load_model": {
       "name": "Load model",
-      "description": "Loads a model on the LM Studio server. This interrupts running requests.",
+      "description": "Loads a model on the LM Studio server (adds an instance; skipped if an identical one is loaded). This can interrupt running requests.",
       "fields": {
         "config_entry_id": {
           "name": "Config entry",
-          "description": "Server to use; optional when only one is configured."
+          "description": "Server to use. Required when more than one server is configured."
         },
         "model": {
           "name": "Model",
@@ -57,11 +79,11 @@
         },
         "context_length": {
           "name": "Context length",
-          "description": "Context length in tokens."
+          "description": "Context length in tokens (512-1048576)."
         },
         "parallel": {
           "name": "Parallel slots",
-          "description": "Number of concurrent requests."
+          "description": "Number of concurrent requests (1-16)."
         },
         "flash_attention": {
           "name": "Flash attention",
@@ -75,7 +97,7 @@
       "fields": {
         "config_entry_id": {
           "name": "Config entry",
-          "description": "Server to use; optional when only one is configured."
+          "description": "Server to use. Required when more than one server is configured."
         },
         "instance_id": {
           "name": "Instance ID",

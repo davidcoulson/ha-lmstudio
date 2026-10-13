@@ -32,9 +32,21 @@ Polling interval (default 30 s) is in the integration's *Configure* options.
 | `sensor.<server>_<model>_size` | GB (decimal) |
 | `binary_sensor.<server>_<model>_flash_attention` | per loaded LLM |
 
-Per-model entities are created when an LLM loads and removed when it unloads. Their
-unique ids are keyed by model key, so reloading the same model restores the same entities.
-The v0 fallback has no parallel / flash attention / size, so those report unknown.
+Per-model entities are created the first time an LLM is seen loaded. When it unloads they
+stay registered but become *unavailable*, so entity ids stay stable and the same entities
+come back when it loads again. Unique ids are keyed by model key.
+
+If a model has several loaded instances, the entities report the instance with the
+lowest id (deterministic); the context-length sensor's `instances` attribute gives the count.
+
+An HTTP 200 response that is not a valid model list is treated as a failure: the server
+sensor goes off, entities go unavailable and the last good snapshot is kept.
+
+### API v1 vs v0
+
+Monitoring works against `/api/v1/models` and falls back to `/api/v0/models`, which has
+no parallel / flash attention / size (those report unknown). The services below need
+API v1 and fail with a clear error on a v0-only server.
 
 ## Alert on a config change
 
@@ -50,7 +62,17 @@ trigger:
 - `lmstudio.load_model` (`model`, `context_length`, `parallel`, `flash_attention`) → `POST /api/v1/models/load`
 - `lmstudio.unload_model` (`instance_id`) → `POST /api/v1/models/unload`
 
-Both interrupt running requests. `config_entry_id` is optional with a single server.
+Both can interrupt running requests. `config_entry_id` is optional only when exactly one
+server is configured; with several it is required, and the target must be loaded.
+Calls are serialised per server, refresh state before and after, never retry on their own,
+and use a 300 s timeout for loads. `load_model` adds an instance and is skipped if an
+identical one is already loaded. Limits: `context_length` 512–1048576, `parallel` 1–16.
+
+## Authentication and security
+
+Authentication failures start Home Assistant's re-authentication flow so the token can be
+replaced. The API token is sent as a Bearer header over **plain HTTP**: use it on a trusted
+LAN only, not across untrusted networks.
 
 ## Development
 

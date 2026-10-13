@@ -3,7 +3,6 @@
 from __future__ import annotations
 
 import copy
-from unittest.mock import AsyncMock, patch
 
 import pytest
 from homeassistant.const import CONF_HOST, CONF_PORT
@@ -83,24 +82,28 @@ def mock_entry() -> MockConfigEntry:
     )
 
 
-@pytest.fixture
-def mock_api(payload):
-    """Patch the client's GET so no real server is contacted."""
-    from custom_components.lmstudio.api import parse_v1
+BASE = "http://10.2.3.62:1234"
 
-    with (
-        patch(
-            "custom_components.lmstudio.api.LMStudioClient.async_get_data",
-            new_callable=AsyncMock,
-        ) as get_data,
-        patch(
-            "custom_components.lmstudio.api.LMStudioClient.async_load_model",
-            new_callable=AsyncMock,
-        ) as load,
-        patch(
-            "custom_components.lmstudio.api.LMStudioClient.async_unload_model",
-            new_callable=AsyncMock,
-        ) as unload,
-    ):
-        get_data.side_effect = lambda: parse_v1(payload)
-        yield type("Api", (), {"get": get_data, "load": load, "unload": unload})
+
+def serve(aioclient_mock, payload, *, status=200):
+    """(Re)register the mocked server's model list."""
+    aioclient_mock.clear_requests()
+    aioclient_mock.get(f"{BASE}/api/v1/models", json=payload, status=status)
+    aioclient_mock.post(f"{BASE}/api/v1/models/load", json={"status": "loaded"})
+    aioclient_mock.post(f"{BASE}/api/v1/models/unload", json={"instance_id": "x"})
+
+
+@pytest.fixture
+def mock_api(aioclient_mock, payload):
+    """Serve the sample payload from a mocked aiohttp session (real client)."""
+    serve(aioclient_mock, payload)
+    return aioclient_mock
+
+
+def posts(aioclient_mock, suffix):
+    """Return JSON bodies of POSTs to /api/v1/models/<suffix>."""
+    return [
+        call[2]
+        for call in aioclient_mock.mock_calls
+        if call[0] == "POST" and str(call[1]).endswith(suffix)
+    ]

@@ -2,11 +2,13 @@
 
 from __future__ import annotations
 
+import asyncio
 import logging
 from datetime import timedelta
 
 from homeassistant.config_entries import ConfigEntry
 from homeassistant.core import HomeAssistant
+from homeassistant.exceptions import ConfigEntryAuthFailed
 from homeassistant.helpers.update_coordinator import DataUpdateCoordinator, UpdateFailed
 
 from .api import (
@@ -14,6 +16,7 @@ from .api import (
     LMStudioClient,
     LMStudioConnectionError,
     LMStudioData,
+    LMStudioError,
 )
 from .const import CONF_SCAN_INTERVAL, DEFAULT_SCAN_INTERVAL, DOMAIN
 
@@ -44,11 +47,16 @@ class LMStudioCoordinator(DataUpdateCoordinator[LMStudioData]):
             ),
         )
         self.client = client
+        # Serialises load/unload so repeated calls can't stack reloads.
+        self.mutation_lock = asyncio.Lock()
 
     async def _async_update_data(self) -> LMStudioData:
         try:
             return await self.client.async_get_data()
         except LMStudioAuthError as err:
-            raise UpdateFailed(f"Authentication failed: {err}") from err
+            raise ConfigEntryAuthFailed(f"Authentication failed: {err}") from err
         except LMStudioConnectionError as err:
             raise UpdateFailed(f"Cannot reach LM Studio: {err}") from err
+        except LMStudioError as err:
+            # Invalid payload etc: keep the previous snapshot, flag unhealthy.
+            raise UpdateFailed(f"Unexpected response from LM Studio: {err}") from err

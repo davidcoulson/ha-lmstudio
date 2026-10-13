@@ -28,17 +28,14 @@ async def async_setup_entry(
         [LMStudioLoadedModels(coordinator), LMStudioAvailableModels(coordinator)]
     )
     sync_model_entities(
-        hass,
         entry,
         coordinator,
         async_add_entities,
-        "sensor",
         lambda key: [
             LMStudioContextLength(coordinator, key),
             LMStudioParallel(coordinator, key),
             LMStudioModelSize(coordinator, key),
         ],
-        ("context_length", "parallel", "model_size"),
     )
 
 

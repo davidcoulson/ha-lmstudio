@@ -4,8 +4,7 @@ from __future__ import annotations
 
 from collections.abc import Callable
 
-from homeassistant.core import HomeAssistant, callback
-from homeassistant.helpers import entity_registry as er
+from homeassistant.core import callback
 from homeassistant.helpers.device_registry import DeviceInfo
 from homeassistant.helpers.entity import Entity
 from homeassistant.helpers.entity_platform import AddConfigEntryEntitiesCallback
@@ -57,9 +56,9 @@ class LMStudioModelEntity(LMStudioEntity):
 
     @property
     def instance(self) -> LoadedInstance | None:
-        """Return the first loaded instance of the model."""
+        """Return the lowest-id loaded instance of the model."""
         model = self.model
-        return model.instances[0] if model and model.instances else None
+        return model.primary_instance if model else None
 
     @property
     def available(self) -> bool:
@@ -68,52 +67,26 @@ class LMStudioModelEntity(LMStudioEntity):
 
 
 def sync_model_entities(
-    hass: HomeAssistant,
     entry: LMStudioConfigEntry,
     coordinator: LMStudioCoordinator,
     async_add_entities: AddConfigEntryEntitiesCallback,
-    platform: str,
     factory: Callable[[str], list[Entity]],
-    suffixes: tuple[str, ...],
 ) -> None:
-    """Add entities for newly loaded LLMs and remove those that unloaded.
+    """Add entities for LLMs the first time they are seen loaded.
 
-    Entities are keyed by model key (``{host:port}_{model key}_{suffix}``) so a
-    reload of the same model brings back the same entities.
+    Entities are keyed by model key (``{host:port}_{model key}_{suffix}``).
+    They are never removed: once a model unloads they stay registered but
+    unavailable, so entity ids stay stable and the same entities return when
+    the model loads again.
     """
-    registry = er.async_get(hass)
-    prefix = f"{entry.unique_id}_"
     known: set[str] = set()
 
     @callback
     def _sync() -> None:
-        loaded = set(coordinator.data.loaded_llms)
-        new = loaded - known
+        new = set(coordinator.data.loaded_llms) - known
         if new:
             known.update(new)
             async_add_entities([e for key in sorted(new) for e in factory(key)])
-
-        for gone in known - loaded:
-            known.discard(gone)
-            for suffix in suffixes:
-                entity_id = registry.async_get_entity_id(
-                    platform, DOMAIN, f"{prefix}{gone}_{suffix}"
-                )
-                if entity_id:
-                    registry.async_remove(entity_id)
-
-    # Drop registry leftovers for models that were unloaded while HA was down.
-    loaded_now = set(coordinator.data.loaded_llms)
-    for reg_entry in er.async_entries_for_config_entry(registry, entry.entry_id):
-        if reg_entry.domain != platform or not reg_entry.unique_id.startswith(prefix):
-            continue
-        rest = reg_entry.unique_id[len(prefix) :]
-        for suffix in suffixes:
-            if rest.endswith(f"_{suffix}"):
-                key = rest[: -len(suffix) - 1]
-                if key not in loaded_now:
-                    registry.async_remove(reg_entry.entity_id)
-                break
 
     _sync()
     entry.async_on_unload(coordinator.async_add_listener(_sync))
