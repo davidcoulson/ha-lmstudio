@@ -127,7 +127,7 @@ def parse_v1(payload: Any) -> LMStudioData:
         if not key:
             continue
         quant = raw.get("quantization") or {}
-        models[key] = Model(
+        model = Model(
             key=key,
             display_name=raw.get("display_name") or key,
             type=raw.get("type") or "llm",
@@ -143,6 +143,12 @@ def parse_v1(payload: Any) -> LMStudioData:
                 if isinstance(i, dict) and i.get("id")
             ],
         )
+        # The server can list one key twice (several variants): merge them.
+        if key in models:
+            seen = {i.id for i in models[key].instances}
+            models[key].instances += [i for i in model.instances if i.id not in seen]
+        else:
+            models[key] = model
     return LMStudioData(models=models)
 
 

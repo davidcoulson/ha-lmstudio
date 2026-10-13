@@ -88,3 +88,14 @@ def test_primary_instance_is_lowest_id() -> None:
 
     model = Model("k", "K", "llm", instances=[LoadedInstance("b"), LoadedInstance("a")])
     assert model.primary_instance.id == "a"
+
+
+def test_parse_v1_merges_duplicate_keys(payload) -> None:
+    """A key listed twice yields one model, keeping every instance."""
+    dup = {**payload["models"][0], "loaded_instances": [{"id": "x:2", "config": {}}]}
+    payload["models"].append(dup)
+    model = parse_v1(payload).models["google/gemma-4-26b-a4b-qat"]
+    assert sorted(i.id for i in model.instances) == [
+        "google/gemma-4-26b-a4b-qat",
+        "x:2",
+    ]

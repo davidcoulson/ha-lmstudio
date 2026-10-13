@@ -41,7 +41,8 @@ def main() -> int:
 
     api = load_api()
     data = api.parse_v1(payload)
-    assert len(data.models) == len(payload["models"]), "model count mismatch"
+    unique = {m["key"] for m in payload["models"]}
+    assert set(data.models) == unique, "model keys mismatch"
 
     print(f"GET {url}")
     print(f"available models : {len(data.models)}")
