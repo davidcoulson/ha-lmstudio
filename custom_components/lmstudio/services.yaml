@@ -1,0 +1,36 @@
+load_model:
+  fields:
+    config_entry_id:
+      selector:
+        config_entry:
+          integration: lmstudio
+    model:
+      required: true
+      example: google/gemma-4-26b-a4b-qat
+      selector:
+        text:
+    context_length:
+      selector:
+        number:
+          min: 1
+          max: 1048576
+          mode: box
+    parallel:
+      selector:
+        number:
+          min: 1
+          max: 64
+          mode: box
+    flash_attention:
+      selector:
+        boolean:
+unload_model:
+  fields:
+    config_entry_id:
+      selector:
+        config_entry:
+          integration: lmstudio
+    instance_id:
+      required: true
+      selector:
+        text:

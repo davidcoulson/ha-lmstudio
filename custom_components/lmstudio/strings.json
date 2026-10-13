@@ -1,0 +1,87 @@
+{
+  "config": {
+    "step": {
+      "user": {
+        "title": "Connect to LM Studio",
+        "description": "Enter the address of the LM Studio local server.",
+        "data": {
+          "host": "Host",
+          "port": "Port",
+          "api_token": "API token (optional)"
+        }
+      }
+    },
+    "error": {
+      "cannot_connect": "Failed to connect to LM Studio",
+      "invalid_auth": "The API token was rejected",
+      "unknown": "Unexpected error"
+    },
+    "abort": {
+      "already_configured": "This LM Studio server is already configured"
+    }
+  },
+  "options": {
+    "step": {
+      "init": {
+        "data": {
+          "scan_interval": "Polling interval (seconds)"
+        }
+      }
+    }
+  },
+  "entity": {
+    "binary_sensor": {
+      "server": { "name": "Server" },
+      "flash_attention": { "name": "{model} flash attention" }
+    },
+    "sensor": {
+      "loaded_models": { "name": "Loaded models" },
+      "available_models": { "name": "Available models" },
+      "context_length": { "name": "{model} context length" },
+      "parallel": { "name": "{model} parallel slots" },
+      "model_size": { "name": "{model} size" }
+    }
+  },
+  "services": {
+    "load_model": {
+      "name": "Load model",
+      "description": "Loads a model on the LM Studio server. This interrupts running requests.",
+      "fields": {
+        "config_entry_id": {
+          "name": "Config entry",
+          "description": "Server to use; optional when only one is configured."
+        },
+        "model": {
+          "name": "Model",
+          "description": "Model key, e.g. google/gemma-4-26b-a4b-qat."
+        },
+        "context_length": {
+          "name": "Context length",
+          "description": "Context length in tokens."
+        },
+        "parallel": {
+          "name": "Parallel slots",
+          "description": "Number of concurrent requests."
+        },
+        "flash_attention": {
+          "name": "Flash attention",
+          "description": "Enable flash attention."
+        }
+      }
+    },
+    "unload_model": {
+      "name": "Unload model",
+      "description": "Unloads a loaded model instance.",
+      "fields": {
+        "config_entry_id": {
+          "name": "Config entry",
+          "description": "Server to use; optional when only one is configured."
+        },
+        "instance_id": {
+          "name": "Instance ID",
+          "description": "Loaded instance id (see the Loaded models attributes)."
+        }
+      }
+    }
+  }
+}
