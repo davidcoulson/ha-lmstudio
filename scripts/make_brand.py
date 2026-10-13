@@ -33,7 +33,8 @@ def render() -> Image.Image:
     # three stacked bars: a context window being filled, with a status dot
     bars = [(200, 250, 824), (200, 450, 700), (200, 650, 540)]
     for i, (x0, y, x1) in enumerate(bars):
-        d.rounded_rectangle((x0, y, x1, y + 120), radius=60, fill=white if i == 0 else soft)
+        fill = white if i == 0 else soft
+        d.rounded_rectangle((x0, y, x1, y + 120), radius=60, fill=fill)
     d.ellipse((730, 650, 850, 770), fill=(110, 231, 183, 255))  # green "online" dot
     return base
 
