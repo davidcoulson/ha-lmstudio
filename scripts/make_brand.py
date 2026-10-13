@@ -4,7 +4,8 @@ from pathlib import Path
 
 from PIL import Image, ImageDraw
 
-OUT = Path(__file__).resolve().parent.parent / "custom_components" / "lmstudio" / "brand"
+ROOT = Path(__file__).resolve().parent.parent
+OUT = ROOT / "custom_components" / "lmstudio" / "brand"
 S = 1024  # draw large, then downscale for smooth edges
 
 
@@ -14,7 +15,7 @@ def gradient() -> Image.Image:
     px = img.load()
     for y in range(S):
         t = y / (S - 1)
-        row = tuple(round(a + (b - a) * t) for a, b in zip(top, bottom))
+        row = tuple(round(a + (b - a) * t) for a, b in zip(top, bottom, strict=True))
         for x in range(S):
             px[x, y] = row
     return img
