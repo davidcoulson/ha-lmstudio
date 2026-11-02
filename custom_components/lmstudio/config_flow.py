@@ -6,7 +6,7 @@ from collections.abc import Mapping
 from typing import Any
 
 import voluptuous as vol
-from homeassistant.config_entries import ConfigFlow, ConfigFlowResult, OptionsFlow
+from homeassistant.config_entries import ConfigFlow, ConfigFlowResult, OptionsFlowWithReload
 from homeassistant.const import CONF_HOST, CONF_PORT
 from homeassistant.core import callback
 from homeassistant.helpers.aiohttp_client import async_get_clientsession
@@ -128,7 +128,7 @@ class LMStudioConfigFlow(ConfigFlow, domain=DOMAIN):
         return LMStudioOptionsFlow()
 
 
-class LMStudioOptionsFlow(OptionsFlow):
+class LMStudioOptionsFlow(OptionsFlowWithReload):
     """Configure the polling interval."""
 
     async def async_step_init(
