@@ -393,3 +393,18 @@ async def test_unload_entry(hass, mock_entry, mock_api) -> None:
     await _setup(hass, mock_entry)
     assert await hass.config_entries.async_unload(mock_entry.entry_id)
     assert mock_entry.state is ConfigEntryState.NOT_LOADED
+
+
+async def test_load_refuses_stale_snapshot(hass, mock_entry, mock_api) -> None:
+    """A failed reconcile must not be treated as 'already loaded'."""
+    await _setup(hass, mock_entry)
+    mock_api.clear_requests()
+    mock_api.get(f"{BASE}/api/v1/models", exc=TimeoutError)
+    with pytest.raises(HomeAssistantError, match="not reachable"):
+        await hass.services.async_call(
+            DOMAIN,
+            "load_model",
+            {"model": KEY, "context_length": 262144, "parallel": 2},
+            blocking=True,
+        )
+    assert posts(mock_api, "/models/load") == []

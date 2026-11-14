@@ -120,6 +120,8 @@ async def async_setup(hass: HomeAssistant, config: ConfigType) -> bool:
             # Reconcile with the server first: loading again would stack a
             # second instance (and may reload), so skip an identical one.
             await coordinator.async_refresh()
+            if not coordinator.last_update_success:
+                raise HomeAssistantError("LM Studio is not reachable; state unknown")
             model = (coordinator.data.models if coordinator.data else {}).get(model_key)
             if model and any(_matches(i, call.data) for i in model.instances):
                 _LOGGER.info("%s is already loaded with these settings", model_key)
