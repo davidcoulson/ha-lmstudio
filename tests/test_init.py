@@ -408,3 +408,22 @@ async def test_load_refuses_stale_snapshot(hass, mock_entry, mock_api) -> None:
             blocking=True,
         )
     assert posts(mock_api, "/models/load") == []
+
+
+async def test_queued_service_dropped_after_unload(hass, mock_entry, mock_api) -> None:
+    """A call queued behind the lock must not act once the entry is unloaded."""
+    await _setup(hass, mock_entry)
+    coordinator = mock_entry.runtime_data
+    mock_api.clear_requests()
+    await coordinator.mutation_lock.acquire()
+    task = hass.async_create_task(
+        hass.services.async_call(
+            DOMAIN, "unload_model", {"instance_id": "abc"}, blocking=True
+        )
+    )
+    await asyncio.sleep(0)
+    await hass.config_entries.async_unload(mock_entry.entry_id)
+    coordinator.mutation_lock.release()
+    with pytest.raises(ServiceValidationError):
+        await task
+    assert posts(mock_api, "/models/unload") == []
