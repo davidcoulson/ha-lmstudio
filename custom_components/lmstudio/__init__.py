@@ -117,9 +117,14 @@ async def async_setup(hass: HomeAssistant, config: ConfigType) -> bool:
         coordinator = _get_coordinator(hass, call)
         model_key = call.data[ATTR_MODEL]
         async with coordinator.mutation_lock:
+            # The entry may have been unloaded or reloaded while we queued.
+            if _get_coordinator(hass, call) is not coordinator:
+                raise ServiceValidationError("LM Studio server was reloaded")
             # Reconcile with the server first: loading again would stack a
             # second instance (and may reload), so skip an identical one.
             await coordinator.async_refresh()
+            if not coordinator.last_update_success:
+                raise HomeAssistantError("LM Studio is not reachable; state unknown")
             model = (coordinator.data.models if coordinator.data else {}).get(model_key)
             if model and any(_matches(i, call.data) for i in model.instances):
                 _LOGGER.info("%s is already loaded with these settings", model_key)
@@ -140,6 +145,9 @@ async def async_setup(hass: HomeAssistant, config: ConfigType) -> bool:
     async def unload_model(call: ServiceCall) -> None:
         coordinator = _get_coordinator(hass, call)
         async with coordinator.mutation_lock:
+            # The entry may have been unloaded or reloaded while we queued.
+            if _get_coordinator(hass, call) is not coordinator:
+                raise ServiceValidationError("LM Studio server was reloaded")
             await coordinator.async_refresh()
             try:
                 await coordinator.client.async_unload_model(call.data[ATTR_INSTANCE_ID])
