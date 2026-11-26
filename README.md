@@ -61,6 +61,7 @@ trigger:
 
 - `lmstudio.load_model` (`model`, `context_length`, `parallel`, `flash_attention`) → `POST /api/v1/models/load`
 - `lmstudio.unload_model` (`instance_id`) → `POST /api/v1/models/unload`
+- `lmstudio.reload_code`: development only (admin). Loads changed Python files without restarting Home Assistant.
 
 Both can interrupt running requests. `config_entry_id` is optional only when exactly one
 server is configured; with several it is required, and the target must be loaded.
